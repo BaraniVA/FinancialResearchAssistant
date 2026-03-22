@@ -58,7 +58,9 @@ function mockQuote(symbol: string): QuoteData {
 export async function fetchCompanyOverview(symbol: string): Promise<CompanyOverview> {
   if (DEMO_MODE) return mockOverview(symbol);
   try {
-    const res = await fetch(`${CONFIG.ALPHA_VANTAGE_BASE_URL}?function=OVERVIEW&symbol=${symbol}&apikey=${CONFIG.ALPHA_VANTAGE_API_KEY}`);
+    const url = `${CONFIG.ALPHA_VANTAGE_BASE_URL}?function=OVERVIEW&symbol=${symbol}&apikey=${CONFIG.ALPHA_VANTAGE_API_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Alpha Vantage HTTP error: ${res.status}`);
     const d = await res.json();
     if (d['Error Message'] || d['Note'] || !d.Symbol) {
       throw new Error('Alpha Vantage failed or hit rate limit');
@@ -82,44 +84,32 @@ export async function fetchCompanyOverview(symbol: string): Promise<CompanyOverv
       sharesOutstanding: parseFloat(d.SharesOutstanding) || 0,
       beta: parseFloat(d.Beta) || 1.0,
     };
-  } catch { 
-    // Fallback to Yahoo Finance via Vite proxy
+  } catch (err) { 
+    console.error("Alpha Vantage fetch failed, trying Yahoo Finance chart fallback:", err);
     try {
-      const res = await fetch(`/api/yahoo2/v10/finance/quoteSummary/${symbol}?modules=summaryProfile,defaultKeyStatistics,financialData,price,summaryDetail`);
+      // Use v8/finance/chart — the only Yahoo endpoint that still works without auth
+      const res = await fetch(`/api/yahoo2/v8/finance/chart/${symbol}?interval=1d&range=5d`);
+      if (!res.ok) throw new Error(`Yahoo Finance Chart HTTP error: ${res.status}`);
       const data = await res.json();
-      const result = data?.quoteSummary?.result?.[0];
-      if (!result) throw new Error('No Yahoo Data');
+      const chart = data?.chart?.result?.[0];
+      if (!chart) throw new Error('No Yahoo Chart Data');
       
+      const meta = chart.meta || {};
+      // Start with mock fundamentals (has solid data for major tickers)
+      const mock = mockOverview(symbol);
+      
+      // Override with live data from Yahoo chart meta
       return {
-        symbol: symbol.toUpperCase(),
-        name: result.price?.shortName || symbol,
-        description: result.summaryProfile?.longBusinessSummary || '',
-        sector: result.summaryProfile?.sector || 'Unknown',
-        industry: result.summaryProfile?.industry || 'Unknown',
-        exchange: result.price?.exchangeName || 'Unknown',
-        marketCap: result.price?.marketCap?.raw || 0,
-        peRatio: result.defaultKeyStatistics?.trailingPE?.raw || result.defaultKeyStatistics?.forwardPE?.raw || 0,
-        pegRatio: result.defaultKeyStatistics?.pegRatio?.raw || 0,
-        eps: result.defaultKeyStatistics?.trailingEps?.raw || 0,
-        bookValue: result.defaultKeyStatistics?.bookValue?.raw || 0,
-        dividendYield: result.summaryDetail?.dividendYield?.raw || 0,
-        profitMargin: result.financialData?.profitMargins?.raw || 0,
-        operatingMarginTTM: result.financialData?.operatingMargins?.raw || 0,
-        returnOnEquityTTM: result.financialData?.returnOnEquity?.raw || 0,
-        returnOnAssetsTTM: result.financialData?.returnOnAssets?.raw || 0,
-        revenuePerShareTTM: result.financialData?.revenuePerShare?.raw || 0,
-        quarterlyEarningsGrowthYOY: result.financialData?.earningsGrowth?.raw || 0,
-        quarterlyRevenueGrowthYOY: result.financialData?.revenueGrowth?.raw || 0,
-        analystTargetPrice: result.financialData?.targetMeanPrice?.raw || 0,
-        week52High: result.summaryDetail?.fiftyTwoWeekHigh?.raw || 0,
-        week52Low: result.summaryDetail?.fiftyTwoWeekLow?.raw || 0,
-        fiftyDayMA: result.summaryDetail?.fiftyDayAverage?.raw || 0,
-        twoHundredDayMA: result.summaryDetail?.twoHundredDayAverage?.raw || 0,
-        sharesOutstanding: result.defaultKeyStatistics?.sharesOutstanding?.raw || 0,
-        beta: result.defaultKeyStatistics?.beta?.raw || 1.0,
+        ...mock,
+        symbol: meta.symbol || symbol.toUpperCase(),
+        name: meta.longName || meta.shortName || mock.name,
+        exchange: meta.fullExchangeName || meta.exchangeName || mock.exchange,
+        week52High: meta.fiftyTwoWeekHigh || mock.week52High,
+        week52Low: meta.fiftyTwoWeekLow || mock.week52Low,
+        description: `${meta.longName || mock.name} is a leading company in the ${mock.sector} sector. (Live price data from Yahoo Finance, fundamentals estimated.)`,
       };
     } catch (yfError) {
-      console.warn("Yahoo Finance fallback failed:", yfError);
+      console.warn("Yahoo Finance chart fallback also failed:", yfError);
       return mockOverview(symbol); 
     }
   }
@@ -129,6 +119,7 @@ export async function fetchQuote(symbol: string): Promise<QuoteData> {
   if (DEMO_MODE) return mockQuote(symbol);
   try {
     const res = await fetch(`${CONFIG.ALPHA_VANTAGE_BASE_URL}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${CONFIG.ALPHA_VANTAGE_API_KEY}`);
+    if (!res.ok) throw new Error(`Alpha Vantage HTTP error: ${res.status}`);
     const d = await res.json();
     const q = d['Global Quote'];
     if (!q || !q['05. price']) throw new Error('Alpha Vantage failed or hit rate limit');
@@ -143,29 +134,36 @@ export async function fetchQuote(symbol: string): Promise<QuoteData> {
       high: parseFloat(q['03. high'] || '0'),
       low: parseFloat(q['04. low'] || '0'),
     };
-  } catch { 
-    // Fallback to Yahoo Finance via Vite proxy
+  } catch (err) { 
+    console.error("Alpha Vantage quote fetch failed, trying Yahoo Finance fallback:", err);
     try {
-      const res = await fetch(`/api/yahoo/v8/finance/chart/${symbol}`);
+      // Use v8/finance/chart which still works without auth cookies
+      const res = await fetch(`/api/yahoo2/v8/finance/chart/${symbol}?interval=1d&range=2d`);
+      if (!res.ok) throw new Error(`Yahoo Finance Chart HTTP error: ${res.status}`);
       const data = await res.json();
-      const result = data?.chart?.result?.[0]?.meta;
-      if (!result) throw new Error('No Yahoo Quote Data');
+      const chart = data?.chart?.result?.[0];
+      if (!chart) throw new Error('No Yahoo Chart Data');
       
-      const price = result.regularMarketPrice;
-      const previousClose = result.previousClose;
+      const meta = chart.meta || {};
+      const price = meta.regularMarketPrice || 0;
+      const previousClose = meta.chartPreviousClose || meta.previousClose || 0;
       const change = price - previousClose;
-      const changePercent = (change / previousClose) * 100;
+      const changePercent = previousClose !== 0 ? (change / previousClose) * 100 : 0;
+      
+      // Get OHLCV from the latest bar if available
+      const indicators = chart.indicators?.quote?.[0] || {};
+      const lastIdx = (indicators.close?.length || 1) - 1;
       
       return {
         symbol: symbol.toUpperCase(),
-        price: price || 0,
-        change: change || 0,
-        changePercent: changePercent || 0,
-        volume: result.regularMarketVolume || 0,
-        previousClose: previousClose || 0,
-        open: price, // rough approximation for the quick chart
-        high: price,
-        low: price,
+        price: price,
+        change: change,
+        changePercent: changePercent,
+        volume: indicators.volume?.[lastIdx] || meta.regularMarketVolume || 0,
+        previousClose: previousClose,
+        open: indicators.open?.[lastIdx] || meta.regularMarketPrice || price,
+        high: indicators.high?.[lastIdx] || meta.regularMarketDayHigh || price,
+        low: indicators.low?.[lastIdx] || meta.regularMarketDayLow || price,
       };
     } catch (yfError) {
       console.warn("Yahoo Finance quote fallback failed:", yfError);
@@ -176,14 +174,9 @@ export async function fetchQuote(symbol: string): Promise<QuoteData> {
 
 export async function fetchSECFilings(symbol: string): Promise<SECFiling[]> {
   try {
-    // SEC requires a descriptive User-Agent
-    const headers = {
-      'User-Agent': 'FinancialResearchAssistant/1.0 (contact@example.com)',
-      'Accept-Encoding': 'gzip, deflate'
-    };
-    
+    // Use local proxy to avoid CORS issues and satisfy SEC's User-Agent requirements
     // 1. Map ticker to CIK
-    const tickersRes = await fetch('https://www.sec.gov/files/company_tickers.json', { headers });
+    const tickersRes = await fetch('/api/sec/files/company_tickers.json');
     if (!tickersRes.ok) throw new Error('Failed to fetch tickers');
     const tickersData = await tickersRes.json();
     
@@ -198,20 +191,28 @@ export async function fetchSECFilings(symbol: string): Promise<SECFiling[]> {
     if (!cikStr) throw new Error('CIK not found');
 
     // 2. Fetch submissions
-    const submissionsRes = await fetch(`https://data.sec.gov/submissions/CIK${cikStr}.json`, { headers });
-    if (!submissionsRes.ok) throw new Error('Failed to fetch submissions');
+    const submissionsRes = await fetch(`/api/sec-data/submissions/CIK${cikStr}.json`);
+    if (!submissionsRes.ok) throw new Error(`Failed to fetch submissions: ${submissionsRes.status}`);
     const submissionsData = await submissionsRes.json();
     
-    const recentFilings = submissionsData.recent || {};
+    // The correct path in the SEC JSON is filings.recent
+    const recentFilings = submissionsData?.filings?.recent || submissionsData?.recent || {};
+    const accessions = recentFilings?.accessionNumber;
+    
+    if (!accessions || !Array.isArray(accessions)) {
+      console.error('SEC Data structure:', submissionsData); // Log for debugging if it fails again
+      throw new Error('Malformed SEC response: accessionNumber missing');
+    }
+
     const filings: SECFiling[] = [];
     const allowedTypes = ['10-K', '10-Q', '8-K', 'DEF 14A', 'S-1'];
     
-    for (let i = 0; i < recentFilings.accessionNumber.length; i++) {
+    for (let i = 0; i < accessions.length; i++) {
       if (filings.length >= 8) break;
-      const form = recentFilings.form[i];
+      const form = recentFilings.form?.[i];
       if (allowedTypes.includes(form)) {
-        const accession = recentFilings.accessionNumber[i];
-        const primaryDoc = recentFilings.primaryDocument[i];
+        const accession = accessions[i];
+        const primaryDoc = recentFilings.primaryDocument?.[i];
         const cleanAccession = accession.replace(/-/g, '');
         filings.push({
           id: accession,
@@ -263,12 +264,35 @@ export function buildKPIData(symbol: string, overview: CompanyOverview): KPIData
   };
 }
 
+export async function fetchCompanyLogo(symbol: string): Promise<string | undefined> {
+  const key = CONFIG.API_NINJAS_KEY?.trim();
+  if (!key || key === 'undefined' || key === 'null') return undefined;
+  
+  try {
+    const sym = encodeURIComponent(symbol.trim().toUpperCase());
+    const res = await fetch(`/api/ninjas/v1/logo?ticker=${sym}`, {
+      headers: { 
+        'X-Api-Key': key,
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!res.ok) return undefined;
+    const data = await res.json();
+    return Array.isArray(data) && data.length > 0 ? data[0].image : undefined;
+  } catch (err) {
+    console.warn("Logo fetch failed.", err);
+    return undefined;
+  }
+}
+
 // ─── Gemini AI Helpers ───────────────────────────────────────────────────────
 
 function getGemini() {
   if (!CONFIG.GEMINI_API_KEY) throw new Error('Gemini API key not configured');
   const genAI = new GoogleGenerativeAI(CONFIG.GEMINI_API_KEY);
-  return genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  // Using gemini-2.5-flash as the modern stable standard
+  return genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 }
 
 export async function analyzeCompanyWithAI(
@@ -419,6 +443,23 @@ Respond in JSON: {"answer": "detailed answer", "citations": ["source 1", "source
   }
 }
 
+async function fetchTranscript(symbol: string): Promise<string> {
+  // API Ninjas earnings transcript endpoint is now premium-only.
+  // Skip the call entirely to avoid 400 errors and go straight to Gemini AI simulation.
+  console.info(`ℹ️ Earnings transcript for ${symbol}: Using AI-powered simulation (API Ninjas transcript is premium-only).`);
+  return '';
+}
+
+function chunkText(text: string, size: number = 3000): string[] {
+  const chunks: string[] = [];
+  let current = 0;
+  while (current < text.length) {
+    chunks.push(text.slice(current, current + size));
+    current += size - 200; // 200 character overlap for context
+  }
+  return chunks;
+}
+
 export async function analyzeEarningsCall(
   symbol: string,
   overview: CompanyOverview
@@ -432,24 +473,52 @@ export async function analyzeEarningsCall(
   negativeSignals: string[];
 }> {
   const model = getGemini();
-  const prompt = `Based on ${overview.name} (${symbol})'s most recent financial performance:
-- Revenue Growth: ${(overview.quarterlyRevenueGrowthYOY * 100).toFixed(1)}% YoY
-- EPS Growth: ${(overview.quarterlyEarningsGrowthYOY * 100).toFixed(1)}% YoY
-- Operating Margin: ${(overview.operatingMarginTTM * 100).toFixed(1)}%
-- Sector: ${overview.sector}
-- Industry: ${overview.industry}
+  const transcript = await fetchTranscript(symbol);
 
-Act as an expert financial transcript analyzer. Simulate a highly realistic and specific earnings call intelligence report for ${symbol} based on their actual industry trends and the provided metrics.
-Return JSON exactly:
-{
-  "sentimentScore": number -100 to 100,
-  "managementTone": "one paragraph describing tone",
-  "guidanceChange": "raised|maintained|lowered|withdrawn",
-  "guidanceSummary": "one sentence summary of guidance",
-  "keyThemes": ["theme1", "theme2", "theme3", "theme4"],
-  "positiveSignals": ["signal1", "signal2", "signal3"],
-  "negativeSignals": ["signal1", "signal2"]
-}`;
+  // Robust RAG: If transcript is large, we score chunks for relevance
+  let relevantContext = '';
+  if (transcript && transcript.length > 5000) {
+    const chunks = chunkText(transcript);
+    // Use a lightweight "relevance pass" - we'll take a subset or use a scoring heuristic
+    // For a robust $0 solution, we'll ask Gemini to identify the most relevant chunks 
+    // based on our specific goals: Guidance, Risk, and Future Outlook.
+    
+    const scoringPrompt = `Identify the 3 most important sections for analyzing guidance and financial outlook from these chunks of an earnings transcript for ${symbol}. 
+    Return only the indices of the top 3 chunks as a comma-separated list like "0, 2, 5".
+    
+    Chunks:
+    ${chunks.map((c, i) => `[Chunk ${i}]: ${c.slice(0, 300)}...`).join('\n')}`;
+    
+    try {
+      const scoringResult = await model.generateContent(scoringPrompt);
+      const indices = scoringResult.response.text().match(/\d+/g)?.map(Number) || [0, 1, 2];
+      relevantContext = indices.slice(0, 3).map(i => chunks[i] || '').join('\n---\n');
+    } catch {
+      relevantContext = chunks.slice(0, 3).join('\n---\n'); // Fallback to first 3
+    }
+  } else if (transcript) {
+    relevantContext = transcript;
+  }
+
+  const prompt = `Act as an expert financial analyst. Analyze the following earnings call context for ${overview.name} (${symbol}).
+  
+  Metrics:
+  - Revenue Growth: ${(overview.quarterlyRevenueGrowthYOY * 100).toFixed(1)}% YoY
+  - Operating Margin: ${(overview.operatingMarginTTM * 100).toFixed(1)}%
+  
+  Transcript Context:
+  ${relevantContext || "No transcript available. Simulate analysis based on metrics and industry trends."}
+  
+  Return JSON exactly:
+  {
+    "sentimentScore": number -100 to 100,
+    "managementTone": "one paragraph describing tone",
+    "guidanceChange": "raised|maintained|lowered|withdrawn",
+    "guidanceSummary": "one sentence summary of guidance",
+    "keyThemes": ["theme1", "theme2", "theme3", "theme4"],
+    "positiveSignals": ["signal1", "signal2", "signal3"],
+    "negativeSignals": ["signal1", "signal2"]
+  }`;
 
   try {
     const result = await model.generateContent(prompt);

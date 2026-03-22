@@ -42,17 +42,28 @@ export function CompanyOverviewCard({ overview, quote, isLoading }: CompanyOverv
       {/* Company Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <h2 className="text-xl font-serif font-semibold text-surface-900 truncate tracking-tight">{overview.name}</h2>
-            <span className="tag-blue font-mono font-bold">{overview.symbol}</span>
-            <span className="tag bg-surface-50 border border-surface-200 text-surface-500 font-mono">{overview.exchange}</span>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="flex items-center gap-1 text-xs text-surface-600 font-medium">
-              <Building2 className="w-3.5 h-3.5" />{overview.sector}
-            </span>
-            <span className="text-surface-300">·</span>
-            <span className="text-xs text-surface-600 font-medium">{overview.industry}</span>
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
+            {overview.logoUrl && (
+              <img 
+                src={overview.logoUrl} 
+                alt={`${overview.name} logo`} 
+                className="w-10 h-10 object-contain rounded-lg bg-white p-1 border border-surface-200 shadow-sm flex-shrink-0" 
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h2 className="text-xl font-serif font-semibold text-surface-900 truncate tracking-tight">{overview.name}</h2>
+                <span className="tag-blue font-mono font-bold">{overview.symbol}</span>
+                <span className="tag bg-surface-50 border border-surface-200 text-surface-500 font-mono">{overview.exchange}</span>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="flex items-center gap-1 text-xs text-surface-600 font-medium">
+                  <Building2 className="w-3.5 h-3.5" />{overview.sector}
+                </span>
+                <span className="text-surface-300">·</span>
+                <span className="text-xs text-surface-600 font-medium">{overview.industry}</span>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -23,6 +23,7 @@ import {
   detectRedFlags,
   semanticSearch,
   analyzeEarningsCall,
+  fetchCompanyLogo,
 } from './services/api';
 
 import { CompanyOverview, QuoteData, SECFiling, KPIData } from './types';
@@ -132,11 +133,22 @@ export default function App() {
     topRef.current?.scrollIntoView({ behavior: 'smooth' });
 
     try {
-      const [ov, qt, fl] = await Promise.all([
-        fetchCompanyOverview(sym),
+      // Sequential fetch with small delay to respect Alpha Vantage free tier limits
+      const ov = await fetchCompanyOverview(sym);
+      
+      // Delay to avoid hitting rate limit for the second AV call
+      await new Promise(r => setTimeout(r, 1000));
+      
+      const [qt, fl, logoUrl] = await Promise.all([
         fetchQuote(sym),
         fetchSECFilings(sym),
+        fetchCompanyLogo(sym).catch(() => undefined)
       ]);
+      
+      if (logoUrl) {
+        ov.logoUrl = logoUrl;
+      }
+      
       setOverview(ov);
       setQuote(qt);
       setFilings(fl);

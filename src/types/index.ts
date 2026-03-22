@@ -3,6 +3,7 @@
 export interface CompanyOverview {
   symbol: string;
   name: string;
+  logoUrl?: string;
   description: string;
   sector: string;
   industry: string;
