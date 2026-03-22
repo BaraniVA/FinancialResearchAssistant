@@ -1,0 +1,92 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ----------------------------------------------------------------------------
+# Secrets and credentials (prevent accidental leaks)
+# ----------------------------------------------------------------------------
+
+# Any env variants
+.env.*
+!.env.example
+!.env.sample
+
+# Generic secret/config files
+*.secret
+*.secrets
+secrets.*
+secret.*
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.jks
+*.keystore
+*.asc
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# Cloud and service credentials
+.aws/
+.azure/
+.gcp/
+gcp-key*.json
+google-service-account*.json
+firebase-adminsdk*.json
+
+# Tooling tokens and local auth
+.npmrc
+.yarnrc.yml
+.pnpmrc
+.netrc
+
+# App/runtime secret outputs
+pids
+*.pid
+*.pid.lock
+
+# Local DB/data dumps that may contain sensitive data
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+*.dump
+
+# Common deployment/platform local env files
+.vercel
+.vercel/*
+.wrangler/
