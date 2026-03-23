@@ -7,6 +7,7 @@ import { KPIData } from '../types';
 interface BenchmarkPanelProps {
   companies: { symbol: string; kpis: KPIData }[];
   onRemove: (symbol: string) => void;
+  onAdd?: (symbol: string) => void;
   isLoading: boolean;
 }
 
@@ -47,9 +48,18 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export function BenchmarkPanel({ companies, onRemove, isLoading }: BenchmarkPanelProps) {
+export function BenchmarkPanel({ companies, onRemove, onAdd, isLoading }: BenchmarkPanelProps) {
   const [activeMetric, setActiveMetric] = useState<KPIMetric>(METRICS[0]);
   const [chartType, setChartType] = useState<'bar' | 'radar'>('bar');
+  const [newPeer, setNewPeer] = useState('');
+
+  const handleAddPeer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPeer.trim() && onAdd) {
+      onAdd(newPeer.trim().toUpperCase());
+      setNewPeer('');
+    }
+  };
 
   if (companies.length === 0) {
     return (
@@ -58,9 +68,21 @@ export function BenchmarkPanel({ companies, onRemove, isLoading }: BenchmarkPane
           <Users className="w-6 h-6 text-brand-600" />
         </div>
         <h3 className="text-sm font-semibold text-surface-900 mb-1">No Companies Added</h3>
-        <p className="text-xs text-surface-500 max-w-xs">
-          Search for companies and add them to the benchmark using the <span className="text-brand-600 font-medium">+ Add to Benchmark</span> button.
+        <p className="text-xs text-surface-500 max-w-xs mb-4">
+          Search for companies and add them to the benchmark using the sidebar, or type a ticker below.
         </p>
+        <form onSubmit={handleAddPeer} className="flex items-center gap-2">
+          <input
+            type="text"
+            value={newPeer}
+            onChange={(e) => setNewPeer(e.target.value)}
+            placeholder="e.g. MSFT"
+            className="w-32 bg-white border border-surface-200 rounded-md px-3 py-1.5 text-xs text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+          <button type="submit" disabled={!newPeer.trim() || isLoading} className="bg-surface-800 hover:bg-surface-900 disabled:opacity-50 text-white px-3 py-1.5 rounded-md text-xs font-medium transition-colors">
+            Add
+          </button>
+        </form>
       </div>
     );
   }
@@ -114,17 +136,35 @@ export function BenchmarkPanel({ companies, onRemove, isLoading }: BenchmarkPane
         </div>
 
         {/* Company Pills */}
-        <div className="flex flex-wrap gap-2 mt-4">
+        <div className="flex flex-wrap items-center gap-2 mt-4">
           {companies.map((c, i) => (
             <div key={c.symbol} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium shadow-sm bg-white"
-              style={{ borderColor: `${COLORS[i]}40`, color: COLORS[i] }}>
-              <div className="w-2 h-2 rounded-full" style={{ background: COLORS[i] }} />
+              style={{ borderColor: `${COLORS[i % COLORS.length]}40`, color: COLORS[i % COLORS.length] }}>
+              <div className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
               <span className="text-surface-800">{c.symbol}</span>
               <button onClick={() => onRemove(c.symbol)} className="ml-1 text-surface-400 hover:text-surface-800 transition-colors">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
           ))}
+
+          {/* Quick Add Peer Inline Form */}
+          {companies.length < 5 && (
+            <form onSubmit={handleAddPeer} className="flex flex-wrap items-center gap-1.5 ml-1">
+              <input
+                type="text"
+                value={newPeer}
+                onChange={(e) => setNewPeer(e.target.value)}
+                placeholder="+ Add Peer (e.g. TSLA)"
+                className="w-36 bg-surface-50 border border-surface-200 hover:border-surface-300 rounded-md px-2.5 py-1.5 text-xs text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-all placeholder-surface-400"
+              />
+              {newPeer.trim() && (
+                <button type="submit" disabled={isLoading} className="bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white px-2.5 py-1.5 rounded-md text-xs font-bold transition-colors shadow-sm">
+                  Add
+                </button>
+              )}
+            </form>
+          )}
         </div>
       </div>
 
@@ -148,7 +188,7 @@ export function BenchmarkPanel({ companies, onRemove, isLoading }: BenchmarkPane
                 <YAxis tick={{ fill: '#737373', fontSize: 11 }} axisLine={{stroke: '#e5e5e5'}} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} cursor={{fill: '#f5f5f5'}} />
                 {companies.map((c, i) => (
-                  <Bar key={c.symbol} dataKey={c.symbol} fill={COLORS[i]} radius={[4, 4, 0, 0]} maxBarSize={60} />
+                  <Bar key={c.symbol} dataKey={c.symbol} fill={COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} maxBarSize={60} />
                 ))}
               </BarChart>
             ) : (
@@ -157,7 +197,7 @@ export function BenchmarkPanel({ companies, onRemove, isLoading }: BenchmarkPane
                 <PolarAngleAxis dataKey="metric" tick={{ fill: '#737373', fontSize: 10 }} />
                 {companies.map((c, i) => (
                   <Radar key={c.symbol} name={c.symbol} dataKey={c.symbol}
-                    stroke={COLORS[i]} fill={COLORS[i]} fillOpacity={0.15} strokeWidth={2} />
+                    stroke={COLORS[i % COLORS.length]} fill={COLORS[i % COLORS.length]} fillOpacity={0.15} strokeWidth={2} />
                 ))}
               </RadarChart>
             )}

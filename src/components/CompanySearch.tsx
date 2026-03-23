@@ -119,7 +119,7 @@ export function CompanySearch({ onSearch, onAddToBenchmark, isLoading, currentSy
         <div className="flex items-start gap-2">
           <TrendingUp className="w-3 h-3 text-brand-600 mt-0.5 flex-shrink-0" />
           <p className="text-[10px] text-surface-500 leading-relaxed">
-            Data via <span className="text-surface-700 font-medium">Alpha Vantage</span> &amp; <span className="text-surface-700 font-medium">SEC</span>. AI via <span className="text-surface-700 font-medium">Gemini 2.0</span>.
+            Data via <span className="text-surface-700 font-medium">Gemini 3.1 Flash Lite Preview (Web Search)</span> &amp; <span className="text-surface-700 font-medium">SEC</span>. AI research via <span className="text-surface-700 font-medium">Google AI</span>.
           </p>
         </div>
       </div>

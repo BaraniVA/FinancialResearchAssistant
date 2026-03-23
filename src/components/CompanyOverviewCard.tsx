@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Building2, DollarSign, BarChart3, Activity, Target, Globe } from 'lucide-react';
 import { CompanyOverview, QuoteData } from '../types';
+import { TradingViewWidget } from './TradingViewWidget';
 
 interface CompanyOverviewCardProps {
   overview: CompanyOverview;
@@ -107,7 +108,7 @@ export function CompanyOverviewCard({ overview, quote, isLoading }: CompanyOverv
       </div>
 
       {/* 52-Week Range */}
-      {quote && (
+      {quote && (overview.week52Low != null && overview.week52High != null) && (
         <div className="p-4 rounded-xl bg-surface-50 border border-surface-200">
           <div className="flex items-center justify-between text-xs mb-2">
             <span className="text-surface-500 font-medium">52-Week Low</span>
@@ -127,6 +128,11 @@ export function CompanyOverviewCard({ overview, quote, isLoading }: CompanyOverv
           </div>
         </div>
       )}
+
+      {/* Real-Time Chart */}
+      <div className="mt-6">
+        <TradingViewWidget symbol={overview.symbol} />
+      </div>
     </motion.div>
   );
 }

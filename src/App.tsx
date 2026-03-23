@@ -15,15 +15,13 @@ import { EarningsIntelligencePanel } from './components/EarningsIntelligencePane
 import { ModelingCopilot } from './components/ModelingCopilot';
 
 import {
-  fetchCompanyOverview,
+  fetchOverviewAndFilings,
   fetchQuote,
-  fetchSECFilings,
   buildKPIData,
-  analyzeCompanyWithAI,
-  detectRedFlags,
+  analyzeCompanyFull,
   semanticSearch,
-  analyzeEarningsCall,
   fetchCompanyLogo,
+  fetchCompanyOverview,
 } from './services/api';
 
 import { CompanyOverview, QuoteData, SECFiling, KPIData } from './types';
@@ -89,33 +87,39 @@ export default function App() {
     { label: 'Peer Benchmarks', icon: BarChart3, ref: benchmarkRef },
   ];
 
+  // ─── Ticking Quote Effect ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!symbol) return;
+    const interval = setInterval(async () => {
+      try {
+        const qt = await fetchQuote(symbol);
+        setQuote(qt);
+      } catch (err) {
+        console.warn("Quote polling failed", err);
+      }
+    }, 5000); // Poll every 5 seconds for a "ticking" effect
+    return () => clearInterval(interval);
+  }, [symbol]);
+
   // ─── Auto-Triggering Analyses ──────────────────────────────────────────────
 
-  const runAIAnalysis = async (sym: string, ov: CompanyOverview) => {
+  const runConsolidatedAnalysis = async (sym: string, ov: CompanyOverview, kp: KPIData) => {
     setIsLoadingAI(true);
-    try {
-      const result = await analyzeCompanyWithAI(sym, ov);
-      setAiAnalysis(result);
-    } catch { setError('AI analysis failed. Check your Gemini API key.'); }
-    finally { setIsLoadingAI(false); }
-  };
-
-  const runRedFlagScan = async (sym: string, ov: CompanyOverview, kp: KPIData) => {
     setIsLoadingRedFlags(true);
-    try {
-      const flags = await detectRedFlags(sym, ov, kp);
-      setRedFlags(flags);
-    } catch { setError('Red flag scan failed.'); }
-    finally { setIsLoadingRedFlags(false); }
-  };
-
-  const runEarningsIntel = async (sym: string, ov: CompanyOverview) => {
     setIsLoadingEarnings(true);
     try {
-      const result = await analyzeEarningsCall(sym, ov);
-      setEarningsAnalysis(result);
-    } catch { setError('Earnings analysis failed.'); }
-    finally { setIsLoadingEarnings(false); }
+      const { analysis, redFlags: flags, earnings } = await analyzeCompanyFull(sym, ov, kp);
+      setAiAnalysis(analysis);
+      setRedFlags(flags);
+      setEarningsAnalysis(earnings);
+    } catch {
+      setError('AI Analysis failed. Some sections may be missing.');
+    } finally {
+      setIsLoadingAI(false);
+      setIsLoadingRedFlags(false);
+      setIsLoadingEarnings(false);
+    }
   };
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
@@ -133,32 +137,25 @@ export default function App() {
     topRef.current?.scrollIntoView({ behavior: 'smooth' });
 
     try {
-      // Sequential fetch with small delay to respect Alpha Vantage free tier limits
-      const ov = await fetchCompanyOverview(sym);
-      
-      // Delay to avoid hitting rate limit for the second AV call
-      await new Promise(r => setTimeout(r, 1000));
-      
-      const [qt, fl, logoUrl] = await Promise.all([
-        fetchQuote(sym),
-        fetchSECFilings(sym),
+      // 1. Fetch live quote instantly for the ticking effect
+      const qt = await fetchQuote(sym).catch(() => null);
+      if (qt) setQuote(qt);
+
+      // 2. Fetch company data & filings using Gemini AI
+      const [{ overview: ov, filings: fl }, logoUrl] = await Promise.all([
+        fetchOverviewAndFilings(sym),
         fetchCompanyLogo(sym).catch(() => undefined)
       ]);
       
-      if (logoUrl) {
-        ov.logoUrl = logoUrl;
-      }
+      if (logoUrl) ov.logoUrl = logoUrl;
       
       setOverview(ov);
-      setQuote(qt);
       setFilings(fl);
       const kpiData = buildKPIData(sym, ov);
       setKpis(kpiData);
 
-      // Auto-trigger the rest of the story asynchronously to build out the report
-      runAIAnalysis(sym, ov);
-      runRedFlagScan(sym, ov, kpiData);
-      runEarningsIntel(sym, ov);
+      // 3. Auto-trigger the consolidated analysis to load all AI panels at once
+      runConsolidatedAnalysis(sym, ov, kpiData);
 
     } catch (err) {
       setError(`Failed to load data for ${sym}. Please try again.`);
@@ -184,7 +181,10 @@ export default function App() {
     try {
       const ov = await fetchCompanyOverview(sym);
       const kpiData = buildKPIData(sym, ov);
-      setBenchmarkCompanies(prev => [...prev, { symbol: sym, kpis: kpiData }]);
+      setBenchmarkCompanies(prev => {
+        if (prev.length >= 5 || prev.some(c => c.symbol === sym)) return prev;
+        return [...prev, { symbol: sym, kpis: kpiData }];
+      });
       setTimeout(() => scrollToSection(benchmarkRef), 100);
     } catch { setError(`Failed to load ${sym} for benchmark.`); }
     finally { setIsLoadingBenchmark(false); }
@@ -206,7 +206,7 @@ export default function App() {
           <CompanySearch
             onSearch={handleSearch}
             onAddToBenchmark={handleAddToBenchmark}
-            isLoading={isLoadingCompany}
+            isLoading={isLoadingCompany || isLoadingBenchmark}
             currentSymbol={symbol || undefined}
           />
 
@@ -294,7 +294,7 @@ export default function App() {
                   overview={overview}
                   analysis={aiAnalysis}
                   isLoading={isLoadingAI}
-                  onAnalyze={() => runAIAnalysis(symbol, overview)}
+                  onAnalyze={() => { if(kpis) runConsolidatedAnalysis(symbol, overview, kpis) }}
                 />
               </div>
 
@@ -307,7 +307,7 @@ export default function App() {
                   kpis={kpis}
                   redFlags={redFlags}
                   isLoading={isLoadingRedFlags}
-                  onScan={() => { if(kpis) runRedFlagScan(symbol, overview, kpis) }}
+                  onScan={() => { if(kpis) runConsolidatedAnalysis(symbol, overview, kpis) }}
                 />
               </div>
 
@@ -331,7 +331,7 @@ export default function App() {
                 <EarningsIntelligencePanel
                   analysis={earningsAnalysis}
                   isLoading={isLoadingEarnings}
-                  onAnalyze={() => runEarningsIntel(symbol, overview)}
+                  onAnalyze={() => { if(kpis) runConsolidatedAnalysis(symbol, overview, kpis) }}
                   symbol={symbol}
                 />
               </div>
@@ -354,6 +354,7 @@ export default function App() {
               <div ref={benchmarkRef} className="scroll-mt-8 min-h-[300px]">
                 <BenchmarkPanel
                   companies={benchmarkCompanies}
+                  onAdd={handleAddToBenchmark}
                   onRemove={handleRemoveFromBenchmark}
                   isLoading={isLoadingBenchmark}
                 />
