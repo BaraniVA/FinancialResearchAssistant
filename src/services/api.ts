@@ -75,7 +75,20 @@ export async function fetchQuote(symbol: string): Promise<QuoteData> {
     const result = await withRetry(() => model.generateContent(prompt));
     const jsonMatch = result.response.text().match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Failed to parse quote');
-    return JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // Safety fallback to prevent crashes on missing properties
+    return {
+      symbol: symbol.toUpperCase(),
+      price: parsed.price || 0,
+      change: parsed.change || 0,
+      changePercent: parsed.changePercent || 0,
+      volume: parsed.volume || 0,
+      previousClose: parsed.previousClose || 0,
+      open: parsed.open || 0,
+      high: parsed.high || 0,
+      low: parsed.low || 0,
+    };
   }
 }
 
