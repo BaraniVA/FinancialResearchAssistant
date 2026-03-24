@@ -88,7 +88,8 @@ export async function fetchOverviewAndFilings(symbol: string): Promise<{
 }> {
   const model = getGeminiModel(true); // Re-enabled Search so fundamentals are 100% accurate.
   
-  const prompt = `Perform a highly focused Google Search for ONLY the current financial metrics of "${symbol}". Do NOT output lengthy descriptions.
+  const prompt = `Perform a highly focused Google Search for ONLY the current financial metrics of "${symbol}".
+  If the company is unlisted, private, or cannot be found, you MUST still return valid JSON and estimate or provide general information in the description, and set numeric fields to 0.
   Extract ONLY: Sector, Industry, Market Cap, PE Ratio, EPS, Beta, Quarterly Revenue Growth YoY, Profit Margin, Return on Equity (ROE), 52-Week High, 52-Week Low, Analyst Target Price, and 3 recent SEC filings.
   
   Respond in valid JSON:
@@ -96,7 +97,7 @@ export async function fetchOverviewAndFilings(symbol: string): Promise<{
     "overview": {
       "symbol": "${symbol.toUpperCase()}",
       "name": "Full Name",
-      "description": "One sentence summary.",
+      "description": "One sentence summary (mention if unlisted/private).",
       "sector": "...",
       "industry": "...",
       "exchange": "...",
@@ -132,8 +133,39 @@ export async function fetchOverviewAndFilings(symbol: string): Promise<{
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Malformed AI response');
     const data = JSON.parse(jsonMatch[0]);
+    
+    // Safely construct overview to prevent crashes on missing data
+    const safeOverview: CompanyOverview = {
+      symbol: symbol.toUpperCase(),
+      name: data.overview?.name || symbol,
+      description: data.overview?.description || "No description available.",
+      sector: data.overview?.sector || "Unknown",
+      industry: data.overview?.industry || "Unknown",
+      exchange: data.overview?.exchange || "Unknown",
+      marketCap: data.overview?.marketCap || 0,
+      peRatio: data.overview?.peRatio || 0,
+      pegRatio: data.overview?.pegRatio || 0,
+      eps: data.overview?.eps || 0,
+      bookValue: data.overview?.bookValue || 0,
+      dividendYield: data.overview?.dividendYield || 0,
+      profitMargin: data.overview?.profitMargin || 0,
+      operatingMarginTTM: data.overview?.operatingMarginTTM || 0,
+      returnOnEquityTTM: data.overview?.returnOnEquityTTM || 0,
+      returnOnAssetsTTM: data.overview?.returnOnAssetsTTM || 0,
+      revenuePerShareTTM: data.overview?.revenuePerShareTTM || 0,
+      quarterlyEarningsGrowthYOY: data.overview?.quarterlyEarningsGrowthYOY || 0,
+      quarterlyRevenueGrowthYOY: data.overview?.quarterlyRevenueGrowthYOY || 0,
+      analystTargetPrice: data.overview?.analystTargetPrice || 0,
+      week52High: data.overview?.week52High || 0,
+      week52Low: data.overview?.week52Low || 0,
+      fiftyDayMA: data.overview?.fiftyDayMA || 0,
+      twoHundredDayMA: data.overview?.twoHundredDayMA || 0,
+      sharesOutstanding: data.overview?.sharesOutstanding || 0,
+      beta: data.overview?.beta || 0,
+    };
+
     return {
-      overview: data.overview,
+      overview: safeOverview,
       filings: data.filings || []
     };
   } catch (err: any) {
@@ -188,7 +220,29 @@ export async function analyzeCompanyFull(
     const text = result.response.text();
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Malformed analysis response');
-    return JSON.parse(jsonMatch[0]);
+    const data = JSON.parse(jsonMatch[0]);
+
+    // Construct a safe return object to prevent array indexing/mapping crashes
+    return {
+      analysis: {
+        summary: data.analysis?.summary || "Analysis unavailable.",
+        keyRisks: Array.isArray(data.analysis?.keyRisks) ? data.analysis.keyRisks : [],
+        keyOpportunities: Array.isArray(data.analysis?.keyOpportunities) ? data.analysis.keyOpportunities : [],
+        financialHighlights: Array.isArray(data.analysis?.financialHighlights) ? data.analysis.financialHighlights : [],
+        managementTone: data.analysis?.managementTone || "neutral",
+        sentimentScore: data.analysis?.sentimentScore || 0,
+      },
+      redFlags: Array.isArray(data.redFlags) ? data.redFlags : [],
+      earnings: {
+        sentimentScore: data.earnings?.sentimentScore || 0,
+        managementTone: data.earnings?.managementTone || "Tone unavailable.",
+        guidanceChange: data.earnings?.guidanceChange || "maintained",
+        guidanceSummary: data.earnings?.guidanceSummary || "Guidance unavailable.",
+        keyThemes: Array.isArray(data.earnings?.keyThemes) ? data.earnings.keyThemes : [],
+        positiveSignals: Array.isArray(data.earnings?.positiveSignals) ? data.earnings.positiveSignals : [],
+        negativeSignals: Array.isArray(data.earnings?.negativeSignals) ? data.earnings.negativeSignals : []
+      }
+    };
   } catch (err) {
     console.error("Consolidated analysis failed:", err);
     throw new Error('Analysis failed');

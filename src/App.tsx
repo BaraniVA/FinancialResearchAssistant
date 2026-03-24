@@ -128,6 +128,10 @@ export default function App() {
     setSymbol(sym);
     setIsLoadingCompany(true);
     setError(null);
+    setOverview(null);
+    setQuote(null);
+    setFilings([]);
+    setKpis(null);
     setAiAnalysis(null);
     setRedFlags([]);
     setSearchResult(null);
@@ -277,6 +281,18 @@ export default function App() {
               <div className="loading-shimmer h-64 rounded-xl" />
               <div className="loading-shimmer h-64 rounded-xl" />
             </div>
+          )}
+
+          {/* Error State or Missing Data */}
+          {symbol && !isLoadingCompany && !overview && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center p-12 max-w-xl mx-auto mt-10 text-center glass-panel rounded-2xl">
+              <ShieldAlert className="w-12 h-12 text-surface-400 mb-4" />
+              <h2 className="text-xl font-semibold text-surface-900 mb-2">Company Data Unavailable</h2>
+              <p className="text-sm text-surface-600 mb-6">We couldn't retrieve valid financial data for '{symbol}'. The company might be unlisted, the ticker invalid, or the data provider unavailable.</p>
+              <button onClick={() => { setSymbol(''); setOverview(null); }} className="px-4 py-2 bg-surface-100 hover:bg-surface-200 text-surface-800 rounded-lg transition-colors font-medium text-sm border border-surface-200 shadow-sm">
+                Clear Search
+              </button>
+            </motion.div>
           )}
 
           {/* Continuous Report Flow */}
